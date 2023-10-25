@@ -63,34 +63,53 @@ reg [ADDR_W-1:0] Address_N;
 wire aw_cross_boundary;
 wire aw_cross_boundary_after;
 
+wire aw_vld;
+wire aw_rdy;
+wire [ID_NUM+ADDR_W+'d8+'d3+'d2 -1:0] aw_payload;
+
+wire [8:0] w_Number_cnt_nxt;
 reg [8:0] w_Number_cnt;
 
+
+// w channel data number count
+assign w_Number_cnt_nxt = (w_Number_cnt==awlen_i_r+1) ? 
+                                                        ((WVALID_i&WREADY_o) ? 1 : 0)
+                                                      :
+                                                        ((WVALID_i&WREADY_o) ? (w_Number_cnt+1) : w_Number_cnt);
 always@(posedge ACLK_i or negedge ARESETn_i) begin
   if(~ARESETn_i)
-    aw_busy <=  0;
-  else if(AWVALID_i & AWREADY_o)
-    aw_busy <=  1;
+    w_Number_cnt <= 0;
+  else
+    w_Number_cnt <= w_Number_cnt_nxt;
 end
 
-// output ready
-assign AWREADY_o = ~aw_busy;
-assign WREADY_o = 
-assign ARREADY_o = 
 
-// output valid
-assign BVALID_o = (AWVALID_i & AWREADY_o & WVALID_i & WREADY_o & WLAST_i) ? 1 : 0;
-assign RVALID_o = (ARVALID_i & ARREADY_i) ? 1 : 0;
-always@(posedge ACLK_i or negedge ARESETn_i) begin
-  if(~ARESETn_i)
-    {BVALID_o, RVALID_o} <= 0;
-end
+
+
+// aw channel outstanding fifo
+// one cycle's delay, equals to a register
+parameter OUTSTANDING_DEPTH = 'd16;
+FIFO #(
+  .FIFO_DEPTH(OUTSTANDING_DEPTH),
+  .DATA_WIDTH(ID_NUM+ADDR_W+'d8+'d3+'d2)
+) FIFO_inst (
+  .clk(ACLK_i),
+  .rst_n(ARESETn_i),
+  .src_vld(AWVALID_i),
+  .src_rdy(AWREADY_o),
+  .src_data({AWID_i, AWADDR_i, AWLEN_i, AWSIZE_i, AWBURST_i}),
+  .dst_vld(aw_vld),//output reg dst_vld,
+  .dst_rdy(aw_rdy),
+  .dst_data(aw_payload),//output [DATA_WIDTH-1:0] dst_data,
+  .(cnt)
+)
 
 // aw channel register
 always@(posedge ACLK_i or negedge ARESETn_i) begin
   if(~ARESETn_i)
     {awid_i_r, awaddr_i_r, awlen_i_r, awsize_i_r, awburst_i_r} <= 0;
-  else
-    {awid_i_r, awaddr_i_r, awlen_i_r, awsize_i_r, awburst_i_r} <= {AWID_i, AWADDR_i, AWLEN_i, AWSIZE_i, AWBURST_i};
+  else if(aw_vld&aw_rdy)
+    {awid_i_r, awaddr_i_r, awlen_i_r, awsize_i_r, awburst_i_r} <= aw_payload;
 end
 
 // aw channel transaction structure
@@ -126,16 +145,38 @@ always@* begin
   endcase
 end
 
-// w channel data number count
+
+
+
+// aw(fifo ports) channel and W(io ports) channel handshake
+assign aw_rdy = ((w_Number_cnt_nxt==1)&WREADY_o&WVALID_i) ? 1 : 0;
+assign WREADY_o = (w_Number_cnt_nxt!=0) ? 1 : 0;
+
+assign fifo_wpayload = 
+
+
+
+
 always@(posedge ACLK_i or negedge ARESETn_i) begin
   if(~ARESETn_i)
-    w_Number_cnt <= 0;
-  else if(w_Number_cnt == awlen_i_r+1)
-    w_Number_cnt <= 0;
-  else if(WVALID_i & WREADY_o)
-    w_Number_cnt <= w_Number_cnt + 1;
-  else
-    w_Number_cnt <= w_Number_cnt;
+    aw_busy <=  0;
+  else if(AWVALID_i & AWREADY_o)
+    aw_busy <=  1;
 end
+
+// output ready
+assign AWREADY_o = ~aw_busy;
+assign WREADY_o = 
+
+// output valid
+assign BVALID_o = (AWVALID_i & AWREADY_o & WVALID_i & WREADY_o & WLAST_i) ? 1 : 0;
+assign RVALID_o = (ARVALID_i & ARREADY_i) ? 1 : 0;
+always@(posedge ACLK_i or negedge ARESETn_i) begin
+  if(~ARESETn_i)
+    {BVALID_o, RVALID_o} <= 0;
+end
+
+
+
 
 endmodule
