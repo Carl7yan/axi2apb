@@ -148,9 +148,10 @@ end
 
 
 
-// aw(fifo ports) channel and W(io ports) channel handshake
+// handshake
 assign aw_rdy = ((w_Number_cnt_nxt==1)&WREADY_o&WVALID_i) ? 1 : 0;
-assign WREADY_o = (w_Number_cnt_nxt!=0) ? 1 : 0;
+assign fifo_wlvd = (w_Number_cnt!=0)&WREADY_o&WVALID_i) ? 1 : 0;
+assign WREADY_o = fifo_wrdy ? 1 : 0;
 
 assign fifo_wpayload = 
 
