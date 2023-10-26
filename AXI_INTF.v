@@ -31,17 +31,16 @@ module AXI_INTF #(
   output                RLAST_o,
   output                RVALID_o,
   input                 RREADY_i,
-  output                fifo_wvld,
-  input                 fifo_wrdy,
-  output[ID_NUM+ADDR_W+DATA_W-1:0]    fifo_wpayload
+  output                afifo_wvld,
+  input                 afifo_wrdy,
+  output[ID_NUM+ADDR_W+DATA_W-1:0]    afifo_wpayload
 );
 
 localparam FIXED = 2'b00;
 localparam INCR = 2'b01;
 localparam WRAP = 2'b10;
 
-// aw channel busy flag
-reg aw_busy;
+
 // aw channel register
 reg [ID_NUM-1:0] awid_i_r;
 reg [ADDR_W-1:0] awaddr_i_r;
@@ -82,8 +81,6 @@ always@(posedge ACLK_i or negedge ARESETn_i) begin
   else
     w_Number_cnt <= w_Number_cnt_nxt;
 end
-
-
 
 
 // aw channel outstanding fifo
@@ -145,30 +142,14 @@ always@* begin
   endcase
 end
 
-
-
-
+  
 // handshake
 assign aw_rdy = ((w_Number_cnt_nxt==1)&WREADY_o&WVALID_i) ? 1 : 0;
-assign fifo_wlvd = (w_Number_cnt!=0)&WREADY_o&WVALID_i) ? 1 : 0;
-assign WREADY_o = fifo_wrdy ? 1 : 0;
+assign afifo_wlvd = (w_Number_cnt!=0)&WREADY_o&WVALID_i) ? 1 : 0;
+assign WREADY_o = afifo_wrdy ? 1 : 0;
 
-assign fifo_wpayload = 
-
-
-
-
-always@(posedge ACLK_i or negedge ARESETn_i) begin
-  if(~ARESETn_i)
-    aw_busy <=  0;
-  else if(AWVALID_i & AWREADY_o)
-    aw_busy <=  1;
-end
-
-// output ready
-assign AWREADY_o = ~aw_busy;
-assign WREADY_o = 
-
+assign afifo_wpayload = {awid_i_r, Address_N, WDATA_i[]};  //input [DATA_w/8-1:0]  WSTRB_i,
+  
 // output valid
 assign BVALID_o = (AWVALID_i & AWREADY_o & WVALID_i & WREADY_o & WLAST_i) ? 1 : 0;
 assign RVALID_o = (ARVALID_i & ARREADY_i) ? 1 : 0;
@@ -176,8 +157,5 @@ always@(posedge ACLK_i or negedge ARESETn_i) begin
   if(~ARESETn_i)
     {BVALID_o, RVALID_o} <= 0;
 end
-
-
-
 
 endmodule
