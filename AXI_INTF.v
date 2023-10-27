@@ -3,8 +3,10 @@ module AXI_INTF #(
   parameter             ADDR_W='d12,        //12位，4KB，一个寄存器32位，共1024个寄存器
   parameter             DATA_W='d32         //每个寄存器大小为12位
 ) (
+  // axi4 global signals
   input                 ACLK_i,
   input                 ARESETn_i,
+  // axi4 AW channel
   input [ID_NUM-1:0]    AWID_i,
   input [ADDR_W-1:0]    AWADDR_i,
   input [7:0]           AWLEN_i,
@@ -12,13 +14,16 @@ module AXI_INTF #(
   input [1:0]           AWBURST_i,
   input                 AWVALID_i,
   output                AWREADY_o,
+  // axi W channel
   input [DATA_W-1:0]    WDATA_i,
   input [DATA_w/8-1:0]  WSTRB_i,
   input                 WVALID_i,
   output                WREADY_o,
+  // axi B channel
   output[ID_NUM-1:0]    BID_o,
   output                BVALID_o,
   input                 BREADY_o,
+  // axi AR channel
   input                 ARID_i,
   input [ADDR_W-1:0]    ARADDR_i,
   input [7:0]           ARLEN_i,
@@ -26,21 +31,28 @@ module AXI_INTF #(
   input [1:0]           ARBURST_i,
   input                 ARVALID_i,
   output                ARREADY_o,
+  // axi R channel
   output[ID_NUM-1:0]    RID_o,
   output[DATA_W-1:0]    RDATA_o,
   output                RLAST_o,
   output                RVALID_o,
   input                 RREADY_i,
+  // async fifo ports
   output                afifo_wvld,
   input                 afifo_wrdy,
-  output[ID_NUM+ADDR_W+DATA_W-1:0]    afifo_wpayload
+  output[ID_NUM+ADDR_W+DATA_w/8+DATA_W-1:0]    afifo_wpayload
 );
 
+// --------------------------------------------------------
+// local parameters
+// --------------------------------------------------------
 localparam FIXED = 2'b00;
 localparam INCR = 2'b01;
 localparam WRAP = 2'b10;
-
-
+  
+// --------------------------------------------------------
+// inner signals
+// --------------------------------------------------------
 // aw channel register
 reg [ID_NUM-1:0] awid_i_r;
 reg [ADDR_W-1:0] awaddr_i_r;
@@ -54,34 +66,43 @@ wire [$clog2(DATA_w/8):0] aw_Data_Bus_Bytes;
 wire [ADDR_W-1:0] aw_Aligned_Address;
 wire [8:0] aw_Burst_Length;
 wire [ADDR_W-1:0] aw_Wrap_Boundary;
+  
 wire [ADDR_W-1:0] aw_Lower_Byte_Lane;
 wire [ADDR_W-1:0] aw_Upper_Byte_Lane;
-
+  
 reg [ADDR_W-1:0] Address_N;
 
 wire aw_cross_boundary;
 wire aw_cross_boundary_after;
-
+  
+wire [8:0] w_Number_cnt_nxt;
+reg [8:0] w_Number_cnt;
+  
+// sync fifo instance ports
 wire aw_vld;
 wire aw_rdy;
 wire [ID_NUM+ADDR_W+'d8+'d3+'d2 -1:0] aw_payload;
 
-wire [8:0] w_Number_cnt_nxt;
-reg [8:0] w_Number_cnt;
-
+// --------------------------------------------------------
+// main logic
+// --------------------------------------------------------
+// handshake
+assign aw_rdy = ((w_Number_cnt_nxt==1)&WREADY_o&WVALID_i) ? 1 : 0;
+assign WREADY_o = (w_Number_cnt_nxt!=0)&afifo_wrdy ? 1 : 0;
+assign afifo_wlvd = (w_Number_cnt!=0)&WREADY_o&WVALID_i) ? 1 : 0;
 
 // w channel data number count
-assign w_Number_cnt_nxt = (w_Number_cnt==awlen_i_r+1) ? 
-                                                        ((WVALID_i&WREADY_o) ? 1 : 0)
+assign w_Number_cnt_nxt = ((w_Number_cnt==awlen_i_r+1)&&(w_Number_cnt==0)) ? 
+                                                        ((aw_vld&aw_rdy) ? 1 : 0)
                                                       :
                                                         ((WVALID_i&WREADY_o) ? (w_Number_cnt+1) : w_Number_cnt);
+
 always@(posedge ACLK_i or negedge ARESETn_i) begin
   if(~ARESETn_i)
     w_Number_cnt <= 0;
   else
     w_Number_cnt <= w_Number_cnt_nxt;
 end
-
 
 // aw channel outstanding fifo
 // one cycle's delay, equals to a register
@@ -98,7 +119,7 @@ FIFO #(
   .dst_vld(aw_vld),//output reg dst_vld,
   .dst_rdy(aw_rdy),
   .dst_data(aw_payload),//output [DATA_WIDTH-1:0] dst_data,
-  .(cnt)
+  .cnt()
 )
 
 // aw channel register
@@ -141,14 +162,6 @@ always@* begin
     end
   endcase
 end
-
-  
-// handshake
-assign aw_rdy = ((w_Number_cnt_nxt==1)&WREADY_o&WVALID_i) ? 1 : 0;
-assign afifo_wlvd = (w_Number_cnt!=0)&WREADY_o&WVALID_i) ? 1 : 0;
-assign WREADY_o = afifo_wrdy ? 1 : 0;
-
-assign afifo_wpayload = {awid_i_r, Address_N, WDATA_i[]};  //input [DATA_w/8-1:0]  WSTRB_i,
   
 // output valid
 assign BVALID_o = (AWVALID_i & AWREADY_o & WVALID_i & WREADY_o & WLAST_i) ? 1 : 0;
@@ -157,5 +170,8 @@ always@(posedge ACLK_i or negedge ARESETn_i) begin
   if(~ARESETn_i)
     {BVALID_o, RVALID_o} <= 0;
 end
+
+// afifo output
+assign afifo_wpayload = {awid_i_r, Address_N, WSTRB_i, WDATA_i};
 
 endmodule
