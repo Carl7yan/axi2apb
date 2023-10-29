@@ -1,7 +1,7 @@
 module AXI_INTF #(
   parameter             ID_NUM='d4,
   parameter             ADDR_W='d12,        //12位，4KB，一个寄存器32位，共1024个寄存器
-  parameter             DATA_W='d32         //每个寄存器大小为12位
+  parameter             DATA_W='d32         //每个寄存器大小为32位
 ) (
   // axi4 global signals
   input                 ACLK_i,
@@ -16,7 +16,7 @@ module AXI_INTF #(
   output                AWREADY_o,
   // axi W channel
   input [DATA_W-1:0]    WDATA_i,
-  input [DATA_w/8-1:0]  WSTRB_i,
+  input [DATA_W/8-1:0]  WSTRB_i,
   input                 WVALID_i,
   output                WREADY_o,
   // axi B channel
@@ -40,7 +40,7 @@ module AXI_INTF #(
   // async fifo ports
   output                afifo_wvld,
   input                 afifo_wrdy,
-  output[ID_NUM+ADDR_W+DATA_w/8+DATA_W-1:0]    afifo_wpayload
+  output[ID_NUM+ADDR_W+DATA_W/8+DATA_W-1:0]    afifo_wpayload
 );
 
 // --------------------------------------------------------
@@ -62,7 +62,7 @@ reg [1:0] awburst_i_r;
 // aw channel transaction structure
 wire [ADDR_W-1:0] aw_Start_Address;
 wire [7:0] aw_Number_Bytes;
-wire [$clog2(DATA_w/8):0] aw_Data_Bus_Bytes;
+wire [$clog2(DATA_W/8):0] aw_Data_Bus_Bytes;
 wire [ADDR_W-1:0] aw_Aligned_Address;
 wire [8:0] aw_Burst_Length;
 wire [ADDR_W-1:0] aw_Wrap_Boundary;
